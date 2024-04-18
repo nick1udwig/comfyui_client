@@ -255,6 +255,10 @@ fn handle_public_request(
                 if is_final { "final".to_string() } else { current_job.next_image_number.to_string() },
             );
             current_job.next_image_number += 1;
+            if is_final {
+                // done!
+                state.current_job = None;
+            }
             state.save()?;
             let file = vfs::open_file(&file, true, None)?;
             file.write(bytes)?;
@@ -357,14 +361,15 @@ fn init(our: Address) {
     println!("{}: begin", our.process());
 
     let images_dir = vfs::create_drive(our.package_id(), "images", None).unwrap();
-    let mut state = State::default();
-    state.save().unwrap();
+    let mut state = State::load();
+    //let mut state = State::default();
+    //state.save().unwrap();
 
     loop {
         let message = match await_message() {
             Ok(m) => m,
             Err(_send_err) => {
-                println!("error sending");
+                println!("SendError");
                 state.current_job = None;
                 state.save().unwrap();
                 continue;

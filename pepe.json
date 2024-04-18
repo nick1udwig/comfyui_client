@@ -1,0 +1,156 @@
+{
+  "name": "pepe",
+  "description": "A workflow that uses the pepe api to generate a meme",
+  "prompts": {
+    "pre_prompt": "pepe_frog",
+    "post_prompt": "very detailed, RAW photograph, masterpiece, top quality, best quality, highest detailed, atmospheric lighting, cinematic composition, 4k HDR, vibrant, highly detailed, Leica Q2 with Summilux 35mm f/1.2 ASPH",
+    "prompt_node": "6",
+    "negative_prompt": "low quality, watermark, ugly, tiling, poorly drawn hands, poorly drawn feet, poorly drawn face, out of frame, extra limbs, body out of frame, blurry, bad anatomy, blurred, watermark, grainy, signature, cut off, draft, closed eyes, text, logo, penis, nude, boobs, pussy, dick, balls, tits",
+    "negative_node": "7",
+    "seed_node": "3"
+  },
+  "workflow": {
+    "3": {
+      "inputs": {
+        "seed": 545585778085263,
+        "steps": 6,
+        "cfg": 2,
+        "sampler_name": "dpmpp_sde_gpu",
+        "scheduler": "karras",
+        "denoise": 1,
+        "model": [
+          "10",
+          0
+        ],
+        "positive": [
+          "6",
+          0
+        ],
+        "negative": [
+          "7",
+          0
+        ],
+        "latent_image": [
+          "5",
+          0
+        ]
+      },
+      "class_type": "KSampler",
+      "_meta": {
+        "title": "KSampler"
+      }
+    },
+    "4": {
+      "inputs": {
+        "ckpt_name": "RealitiesEdgeXLLIGHTNING_LIGHTNING34Step.safetensors"
+      },
+      "class_type": "CheckpointLoaderSimple",
+      "_meta": {
+        "title": "Load Checkpoint"
+      }
+    },
+    "5": {
+      "inputs": {
+        "width": 512,
+        "height": 512,
+        "batch_size": 1
+      },
+      "class_type": "EmptyLatentImage",
+      "_meta": {
+        "title": "Empty Latent Image"
+      }
+    },
+    "6": {
+      "inputs": {
+        "text": "<user_prompt_here>",
+        "clip": [
+          "12",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP Text Encode (Prompt)"
+      }
+    },
+    "7": {
+      "inputs": {
+        "text": "low quality, watermark, ugly, tiling, poorly drawn hands, poorly drawn feet, poorly drawn face, out of frame, extra limbs, body out of frame, blurry, bad anatomy, blurred, watermark, grainy, signature, cut off, draft, closed eyes, text, logo\n\npenis, nude, boobs, pussy, dick, balls, tits",
+        "clip": [
+          "12",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP Text Encode (Prompt)"
+      }
+    },
+    "8": {
+      "inputs": {
+        "samples": [
+          "3",
+          0
+        ],
+        "vae": [
+          "4",
+          2
+        ]
+      },
+      "class_type": "VAEDecode",
+      "_meta": {
+        "title": "VAE Decode"
+      }
+    },
+    "10": {
+      "inputs": {
+        "lora_name": "DD-pepe-v2.safetensors",
+        "strength_model": 1,
+        "strength_clip": 1,
+        "model": [
+          "4",
+          0
+        ],
+        "clip": [
+          "4",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA"
+      }
+    },
+    "11": {
+      "inputs": {
+        "images": [
+          "8",
+          0
+        ]
+      },
+      "class_type": "PreviewImage",
+      "_meta": {
+        "title": "Preview Image"
+      }
+    },
+    "12": {
+      "inputs": {
+        "lora_name": "DD-pepe-v2.safetensors",
+        "strength_model": 1,
+        "strength_clip": 1,
+        "model": [
+          "10",
+          0
+        ],
+        "clip": [
+          "10",
+          1
+        ]
+      },
+      "class_type": "LoraLoader",
+      "_meta": {
+        "title": "Load LoRA"
+      }
+    }
+  }
+}

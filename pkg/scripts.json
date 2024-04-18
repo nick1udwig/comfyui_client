@@ -1,0 +1,13 @@
+{
+    "admin.wasm": {
+        "root": false,
+        "public": false,
+        "request_networking": false,
+        "request_capabilities": [
+            "client:comfyui_client:nick1udwig.os"
+        ],
+        "grant_capabilities": [
+            "client:comfyui_client:nick1udwig.os"
+        ]
+    }
+}

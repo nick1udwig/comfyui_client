@@ -3,8 +3,9 @@ use std::str::FromStr;
 
 use alloy_primitives::Address as AlloyAddress;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-use kinode_process_lib::{http, vfs};
+use kinode_process_lib::{timer, vfs};
 use kinode_process_lib::{
     await_message, call_init, get_blob, get_typed_state, println, set_state,
     Address, Message, LazyLoadBlob, ProcessId, Request, Response,
@@ -116,6 +117,12 @@ impl State {
     }
 }
 
+#[derive(Error, Debug)]
+enum NotAMatchError {
+    #[error("Match failed")]
+    NotAMatch
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 enum PublicRequest {
     RunJob(JobParameters),
@@ -216,11 +223,11 @@ fn handle_public_request(
     images_dir: &str,
     state: &mut State,
 ) -> anyhow::Result<()> {
-    match serde_json::from_slice(message.body())? {
-        PublicRequest::RunJob(_job_parameters) => {
-            //if state.current_job.is_some() { // TODO
-            //    return Err(anyhow::anyhow!("wait until current job is done"));
-            //}
+    match serde_json::from_slice(message.body()) {
+        Ok(PublicRequest::RunJob(_job_parameters)) => {
+            if state.current_job.is_some() {
+                return Err(anyhow::anyhow!("wait until current job is done"));
+            }
             if state.router_process.is_none() {
                 return Err(anyhow::anyhow!("cannot send job until AdminRequest::SetRouterProcess"));
             };
@@ -237,7 +244,7 @@ fn handle_public_request(
                 .expects_response(20)
                 .send()?;
         }
-        PublicRequest::JobUpdate { job_id, is_final, signature } => {
+        Ok(PublicRequest::JobUpdate { job_id, is_final, signature }) => {
             let Some(ref mut current_job) = state.current_job else {
                 println!("unexpectedly got JobUpdate with no current_job set");
                 state.current_job = Some(CurrentJob {
@@ -263,6 +270,9 @@ fn handle_public_request(
             let file = vfs::open_file(&file, true, None)?;
             file.write(bytes)?;
         }
+        Err(e) => {
+            return Err(NotAMatchError::NotAMatch.into());
+        }
     }
     Ok(())
 }
@@ -271,10 +281,11 @@ fn handle_public_response(
     message: &Message,
     state: &mut State,
 ) -> anyhow::Result<()> {
-    match serde_json::from_slice(message.body())? {
-        PublicResponse::RunJob(response) => {
+    match serde_json::from_slice(message.body()) {
+        Ok(PublicResponse::RunJob(response)) => {
             match response {
                 RunResponse::JobQueued { job_id } => {
+                    timer::set_timer(10 * 1000, Some(serde_json::to_vec(&job_id)?)); // TODO
                     state.current_job = Some(CurrentJob {
                         job_id,
                         next_image_number: 0,
@@ -290,7 +301,10 @@ fn handle_public_response(
                 }
             }
         }
-        PublicResponse::JobUpdate => {}
+        Ok(PublicResponse::JobUpdate) => {}
+        Err(e) => {
+            return Err(NotAMatchError::NotAMatch.into());
+        }
     }
     Ok(())
 }
@@ -304,8 +318,8 @@ fn handle_admin_request(
     if source.node() != our.node() {
         return Err(anyhow::anyhow!("only our can make AdminRequests; rejecting from {source:?}"));
     }
-    match serde_json::from_slice(message.body())? {
-        AdminRequest::SetRouterProcess { process_id } => {
+    match serde_json::from_slice(message.body()) {
+        Ok(AdminRequest::SetRouterProcess { process_id }) => {
             let process_id = process_id.parse()?;
             state.router_process = Some(process_id);
             state.save()?;
@@ -313,7 +327,7 @@ fn handle_admin_request(
                 .body(serde_json::to_vec(&AdminResponse::SetRouterProcess { err: None })?)
                 .send()?;
         }
-        AdminRequest::SetRollupSequencer { address } => {
+        Ok(AdminRequest::SetRollupSequencer { address }) => {
             let address = address.parse()?;
             state.rollup_sequencer = Some(address);
             state.save()?;
@@ -322,7 +336,7 @@ fn handle_admin_request(
                 .body(serde_json::to_vec(&AdminResponse::SetRollupSequencer { err: None })?)
                 .send()?;
         }
-        AdminRequest::GetRollupState => {
+        Ok(AdminRequest::GetRollupState) => {
             if state.rollup_sequencer.is_none() {
                 let err = "no rollup sequencer set";
                 Response::new()
@@ -337,6 +351,9 @@ fn handle_admin_request(
                 .body(serde_json::to_vec(&AdminResponse::GetRollupState { err: None })?)
                 .send()?;
         }
+        Err(e) => {
+            return Err(NotAMatchError::NotAMatch.into());
+        }
     }
     Ok(())
 }
@@ -348,10 +365,38 @@ fn handle_message(
     state: &mut State,
 ) -> anyhow::Result<()> {
     if message.is_request() {
-        if handle_admin_request(our, message, state).is_ok() {
-            return Ok(());
+        match handle_admin_request(our, message, state) {
+            Ok(_) => return Ok(()),
+            Err(e) => {
+                if e.downcast_ref::<NotAMatchError>().is_none() {
+                    return Err(e);
+                }
+            }
         }
-        return handle_public_request(our, message, images_dir, state);
+        match handle_public_request(our, message, images_dir, state) {
+            Ok(_) => return Ok(()),
+            Err(e) => {
+                if e.downcast_ref::<NotAMatchError>().is_none() {
+                    return Err(e);
+                }
+            }
+        }
+        println!("{:?}", serde_json::from_slice::<serde_json::Value>(message.body()));
+        if message.source() == &"timer:distro:sys".parse()? {
+            let Some(ref current_job) = state.current_job else {
+                return Err(anyhow::anyhow!(
+                    "unexpected request from {:?}: {:?}",
+                    message.source(),
+                    serde_json::from_slice::<serde_json::Value>(message.body()),
+                ));
+            };
+            let timer_job_id: u64 = serde_json::from_slice(message.context().unwrap_or_default())?;
+            if current_job.job_id == timer_job_id {
+                state.current_job = None;
+                state.save()?;
+                return Err(anyhow::anyhow!("job {} timed out", timer_job_id));
+            }
+        }
     }
     handle_public_response(message, state)
 }

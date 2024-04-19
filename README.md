@@ -28,5 +28,5 @@ admin:comfyui_provider:nick1udwig.os {"SetRollupSequencer": {"address": "ROLLUP.
 ## Example usage
 
 ```
-m our@client:comfyui_client:nick1udwig.os '{"RunJob": {"workflow": "basic", "parameters": "{\"quality\": \"fast\", \"aspect_ratio\": \"square\", \"workflow\": \"basic\", \"user_id\": \"0\", \"negative_prompt\": \"\", \"positive_prompt\": \"going for a walk in the park and looking at beautiful flowers and butterflies\", \"cfg_scale\": {\"min\": 1.0, \"max\": 1.0}, \"character\": {\"id\": \"pepe\"}, \"styler\": {\"id\": \"hand-drawn\"}}"}}'
+m our@client:comfyui_client:nick1udwig.os '{"RunJob": {"workflow": "new", "parameters": "{\"quality\": \"fast\", \"aspect_ratio\": \"square\", \"workflow\": \"new\", \"user_id\": \"0\", \"negative_prompt\": \"\", \"positive_prompt\": \"going for a walk in the park and looking at beautiful flowers and butterflies\", \"cfg_scale\": {\"min\": 1.0, \"max\": 1.0}, \"character\": {\"id\": \"pepe\"}, \"styler\": {\"id\": \"hand-drawn\"}}"}}'
 ```

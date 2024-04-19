@@ -218,9 +218,9 @@ fn handle_public_request(
 ) -> anyhow::Result<()> {
     match serde_json::from_slice(message.body())? {
         PublicRequest::RunJob(_job_parameters) => {
-            if state.current_job.is_some() {
-                return Err(anyhow::anyhow!("wait until current job is done"));
-            }
+            //if state.current_job.is_some() { // TODO
+            //    return Err(anyhow::anyhow!("wait until current job is done"));
+            //}
             if state.router_process.is_none() {
                 return Err(anyhow::anyhow!("cannot send job until AdminRequest::SetRouterProcess"));
             };
@@ -362,8 +362,6 @@ fn init(our: Address) {
 
     let images_dir = vfs::create_drive(our.package_id(), "images", None).unwrap();
     let mut state = State::load();
-    //let mut state = State::default();
-    //state.save().unwrap();
 
     loop {
         let message = match await_message() {

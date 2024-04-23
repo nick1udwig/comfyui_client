@@ -267,7 +267,7 @@ fn handle_public_request(
             let file = vfs::open_file(&file, true, None)?;
             file.write(bytes)?;
         }
-        Err(e) => {
+        Err(_e) => {
             return Err(NotAMatchError::NotAMatch.into());
         }
     }
@@ -299,7 +299,7 @@ fn handle_public_response(
             }
         }
         Ok(PublicResponse::JobUpdate) => {}
-        Err(e) => {
+        Err(_e) => {
             return Err(NotAMatchError::NotAMatch.into());
         }
     }
@@ -313,6 +313,9 @@ fn handle_admin_request(
 ) -> anyhow::Result<()> {
     let source = message.source();
     if source.node() != our.node() {
+        if serde_json::from_slice::<AdminRequest>(message.body()).is_err() {
+            return Err(NotAMatchError::NotAMatch.into());
+        }
         return Err(anyhow::anyhow!("only our can make AdminRequests; rejecting from {source:?}"));
     }
     match serde_json::from_slice(message.body()) {
@@ -378,24 +381,33 @@ fn handle_message(
                 }
             }
         }
-        println!("{:?}", serde_json::from_slice::<serde_json::Value>(message.body()));
-        if message.source() == &"timer:distro:sys".parse()? {
-            let Some(ref current_job) = state.current_job else {
-                return Err(anyhow::anyhow!(
-                    "unexpected request from {:?}: {:?}",
-                    message.source(),
-                    serde_json::from_slice::<serde_json::Value>(message.body()),
-                ));
-            };
-            let timer_job_id: u64 = serde_json::from_slice(message.context().unwrap_or_default())?;
-            if current_job.job_id == timer_job_id {
-                state.current_job = None;
-                state.save()?;
-                return Err(anyhow::anyhow!("job {} timed out", timer_job_id));
+        return Err(anyhow::anyhow!(
+            "unexpected request from {:?}: {:?}",
+            message.source(),
+            serde_json::from_slice::<serde_json::Value>(message.body()),
+        ));
+    }
+    match handle_public_response(message, state) {
+        Ok(_) => return Ok(()),
+        Err(e) => {
+            if e.downcast_ref::<NotAMatchError>().is_none() {
+                return Err(e);
             }
         }
     }
-    handle_public_response(message, state)
+    if message.source().to_string() == format!("{}@timer:distro:sys", our.node()) {
+        let Some(ref current_job) = state.current_job else {
+            // job already finished
+            return Ok(());
+        };
+        let timer_job_id: u64 = serde_json::from_slice(message.context().unwrap_or_default())?;
+        if current_job.job_id == timer_job_id {
+            state.current_job = None;
+            state.save()?;
+            return Err(anyhow::anyhow!("job {} timed out", timer_job_id));
+        }
+    }
+    Ok(())
 }
 
 call_init!(init);
